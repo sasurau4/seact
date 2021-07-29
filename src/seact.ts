@@ -70,36 +70,27 @@ function createDom(fiber: SFiber): HTMLElement | Text {
   return dom
 }
 
-function render(element: SFiber, container: Container): void {
-  nextUnitOfWork = {
-    dom: container,
-    // @ts-ignore 型がハマらない
-    props: {
-      children: [element],
-    },
+function commitWork(fiber: SFiber | undefined) {
+  if (!fiber) {
+    return
   }
-}
-
-let nextUnitOfWork: SFiber | null | undefined = null
-
-function workLoop(deadline: any): void {
-  let shouldYield = false
-  while (nextUnitOfWork && !shouldYield) {
-    nextUnitOfWork = performUnitOfWork(nextUnitOfWork)
-    shouldYield = deadline.timeRemaining() < 1
+  if (fiber.parent && fiber.parent.dom && fiber.dom) {
+    const domParent = fiber.parent.dom
+    domParent.appendChild(fiber.dom)
+  } else {
+    UNREACHED()
   }
-  // NOTE: https://github.com/microsoft/TypeScript/issues/40807
-  requestIdleCallback(workLoop)
+  commitWork(fiber.child)
+  commitWork(fiber.sibling)
 }
-
-requestIdleCallback(workLoop)
+function commitRoot() {
+  commitWork(wipRoot?.child)
+  wipRoot = null
+}
 
 function performUnitOfWork(fiber: SFiber): SFiber | undefined {
   if (!fiber.dom) {
     fiber.dom = createDom(fiber)
-  }
-  if (fiber.parent && fiber.parent.dom) {
-    fiber.parent.dom.appendChild(fiber.dom)
   }
 
   const elements = fiber.props.children
@@ -114,6 +105,7 @@ function performUnitOfWork(fiber: SFiber): SFiber | undefined {
       parent: fiber,
       dom: null,
     }
+    // NOTE: newFiber is child if the first child and is sibling otherwise
     if (index === 0) {
       fiber.child = newFiber
     } else if (prevSibling) {
@@ -139,6 +131,40 @@ function performUnitOfWork(fiber: SFiber): SFiber | undefined {
       UNREACHED()
     }
   }
+}
+
+function workLoop(deadline: any): void {
+  let shouldYield = false
+  while (nextUnitOfWork && !shouldYield) {
+    nextUnitOfWork = performUnitOfWork(nextUnitOfWork)
+    shouldYield = deadline.timeRemaining() < 1
+  }
+
+  if (!nextUnitOfWork && wipRoot) {
+    commitRoot()
+  }
+  // NOTE: https://github.com/microsoft/TypeScript/issues/40807
+  requestIdleCallback(workLoop)
+}
+
+/**
+ * Global Vars
+ */
+let nextUnitOfWork: SFiber | null | undefined = null
+let wipRoot: SFiber | null | undefined = null
+
+// main loop
+requestIdleCallback(workLoop)
+
+function render(element: SFiber, container: Container): void {
+  wipRoot = {
+    dom: container,
+    // @ts-ignore 型がハマらない
+    props: {
+      children: [element],
+    },
+  }
+  nextUnitOfWork = wipRoot
 }
 
 export const Seact = {
