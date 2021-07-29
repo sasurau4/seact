@@ -1,21 +1,28 @@
-import { Seact, createElement } from './src/seact.js'
-// const element = Seact.createElement(
-//   'div',
-//   { id: 'foo' },
-//   Seact.createElement('a', null, 'bar'),
-//   Seact.createElement('b'),
-// )
+import { createElement, render } from './src/seact.js'
 
-const element: any = (
-  <div id="foo">
-    <a>bar</a>
-    <b />
-  </div>
-)
-
+type Props = {
+  name: string
+}
 const container = document.getElementById('root')
+
+const updateValue = (e: any) => {
+  console.log(e)
+  rerender(e.target.value)
+}
+
+const rerender = (value:string) => {
+  const element = (
+    <div>
+      <input onInput={updateValue} value={value} />
+      <h2>Hello {value}</h2>
+    </div>
+  )
+  render(element, container as HTMLElement)
+}
+
+
 if (container) {
-  Seact.render(element, container)
+  rerender("World")
 } else {
   console.warn('No container')
 }

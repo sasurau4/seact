@@ -1,4 +1,12 @@
 const TEXT_ELEMENT = 'TEXT_ELEMENT' as const
+const UPDATE_EFFECT_TAG = 'UPDATE' as const
+const PLACEMENT_EFFECT_TAG = 'PLACEMENT' as const
+const DELETION_EFFECT_TAG = 'DELETION' as const
+type EFFECT_TAG =
+  | typeof UPDATE_EFFECT_TAG
+  | typeof PLACEMENT_EFFECT_TAG
+  | typeof DELETION_EFFECT_TAG
+
 type SFiberCommonProperties = {
   dom?: Container | null
   parent?: HTMLFiberElement
@@ -7,6 +15,8 @@ type SFiberCommonProperties = {
   props: {
     children: SFiber[]
   }
+  alternate?: SFiber | null
+  effectTag?: EFFECT_TAG
 }
 
 type TextFiberElement = {
@@ -60,23 +70,78 @@ function createDom(fiber: SFiber): HTMLElement | Text {
       ? document.createTextNode('')
       : document.createElement(fiber.type)
 
-  const isProperty = (key: string) => key !== 'children'
-  Object.keys(fiber.props)
-    .filter(isProperty)
-    .forEach((name) => {
-      // @ts-ignore TODO
-      dom[name] = fiber.props[name]
-    })
+  updateDom(dom, {}, fiber.props)
   return dom
+}
+
+type GeneralProps = Record<string, any>
+const isEvent = (key: string) => key.startsWith('on')
+const isProperty = (key: string) => key !== 'children' && !isEvent(key)
+const isNew = (prev: GeneralProps, next: GeneralProps) => (key: string) =>
+  prev[key] !== next[key]
+const isGone = (prev: GeneralProps, next: GeneralProps) => (key: string) =>
+  !(key in next)
+
+function updateDom(
+  dom: Container,
+  prevProps: GeneralProps,
+  nextProps: GeneralProps,
+) {
+  // Remove old or changed event listeners
+  Object.keys(prevProps)
+    .filter(isEvent)
+    .filter((key) => !(key in nextProps) || isNew(prevProps, nextProps)(key))
+    .forEach((name) => {
+      const eventType = name.toLowerCase().substring(2)
+      dom.removeEventListener(eventType, prevProps[name])
+    })
+
+  // Remove old props
+  Object.keys(prevProps)
+    .filter(isProperty)
+    .filter(isGone(prevProps, nextProps))
+    .forEach((name) => {
+      // @ts-ignore DOM assignment
+      dom[name] = ''
+    })
+
+  // Set new or changed props
+  Object.keys(nextProps)
+    .filter(isProperty)
+    .filter(isNew(prevProps, nextProps))
+    .forEach((name) => {
+      // @ts-ignore DOM assignment
+      dom[name] = nextProps[name]
+    })
+
+  // Add event listeners
+  Object.keys(nextProps)
+    .filter(isEvent)
+    .filter(isNew(prevProps, nextProps))
+    .forEach((name) => {
+      const eventType = name.toLowerCase().substring(2)
+      dom.addEventListener(eventType, nextProps[name])
+    })
 }
 
 function commitWork(fiber: SFiber | undefined) {
   if (!fiber) {
     return
   }
-  if (fiber.parent && fiber.parent.dom && fiber.dom) {
+  if (fiber.parent && fiber.parent.dom) {
     const domParent = fiber.parent.dom
-    domParent.appendChild(fiber.dom)
+    if (fiber.effectTag === PLACEMENT_EFFECT_TAG && fiber.dom) {
+      domParent.appendChild(fiber.dom)
+    } else if (fiber.effectTag === UPDATE_EFFECT_TAG && fiber.dom) {
+      if (fiber.alternate) {
+      console.log("updateDom", fiber.type)
+        updateDom(fiber.dom, fiber.alternate.props, fiber.props)
+      } else {
+        UNREACHED()
+      }
+    } else if (fiber.effectTag === DELETION_EFFECT_TAG && fiber.dom) {
+      domParent.removeChild(fiber.dom)
+    }
   } else {
     UNREACHED()
   }
@@ -84,8 +149,66 @@ function commitWork(fiber: SFiber | undefined) {
   commitWork(fiber.sibling)
 }
 function commitRoot() {
+  deletions.forEach(commitWork)
   commitWork(wipRoot?.child)
+  currentRoot = wipRoot
   wipRoot = null
+}
+
+function reconcileChildren(wipFiber: SFiber, elements: SFiber[]) {
+  console.log("reconcile!")
+  let index: number = 0
+  let oldFiber = wipFiber.alternate && wipFiber.alternate.child
+  let prevSibling: SFiber | undefined | null = null
+  // NOTE: create a newFiber for each child
+  while (index < elements.length || oldFiber) {
+    const element = elements[index]
+    let newFiber: SFiber | undefined = undefined
+    const sameType = oldFiber && element && element.type == oldFiber.type
+
+    // Update existing element props
+    if (sameType && oldFiber && element) {
+      newFiber = {
+        type: oldFiber.type,
+        props: element.props,
+        dom: oldFiber.dom,
+        parent: wipFiber,
+        alternate: oldFiber,
+        effectTag: UPDATE_EFFECT_TAG,
+      }
+    }
+    // Create new element
+    if (element && !sameType) {
+      newFiber = {
+        type: element.type,
+        props: element.props,
+        dom: null,
+        parent: wipFiber,
+        alternate: null,
+        effectTag: PLACEMENT_EFFECT_TAG,
+      }
+    }
+    // Remove existing element
+    if (oldFiber && !sameType) {
+      oldFiber.effectTag = DELETION_EFFECT_TAG
+      deletions.push(oldFiber)
+    }
+
+    if (oldFiber) {
+      oldFiber = oldFiber.sibling
+    }
+    // NOTE: newFiber is child if the first child and is sibling otherwise
+    if (index === 0) {
+      wipFiber.child = newFiber
+    } else if (prevSibling) {
+      prevSibling.sibling = newFiber
+    } else {
+      UNREACHED()
+    }
+
+    prevSibling = newFiber
+    index++
+  }
 }
 
 function performUnitOfWork(fiber: SFiber): SFiber | undefined {
@@ -94,42 +217,17 @@ function performUnitOfWork(fiber: SFiber): SFiber | undefined {
   }
 
   const elements = fiber.props.children
-  let prevSibling: SFiber | null = null
-
-  // NOTE: create a newFiber for each child
-  for (let index = 0; index < elements.length; index++) {
-    const element = elements[index]
-    const newFiber: SFiber = {
-      type: element.type,
-      props: element.props,
-      parent: fiber,
-      dom: null,
-    }
-    // NOTE: newFiber is child if the first child and is sibling otherwise
-    if (index === 0) {
-      fiber.child = newFiber
-    } else if (prevSibling) {
-      prevSibling.sibling = newFiber
-    } else {
-      UNREACHED()
-    }
-
-    prevSibling = newFiber
-  }
+  reconcileChildren(fiber, elements)
 
   if (fiber.child) {
     return fiber.child
   }
-  let nextFiber: SFiber = fiber
+  let nextFiber: SFiber|undefined = fiber
   while (nextFiber) {
     if (nextFiber.sibling) {
       return nextFiber.sibling
     }
-    if (nextFiber.parent) {
-      nextFiber = nextFiber.parent
-    } else {
-      UNREACHED()
-    }
+    nextFiber = nextFiber.parent
   }
 }
 
@@ -151,22 +249,22 @@ function workLoop(deadline: any): void {
  * Global Vars
  */
 let nextUnitOfWork: SFiber | null | undefined = null
+let currentRoot: SFiber | null | undefined = null
 let wipRoot: SFiber | null | undefined = null
+let deletions: SFiber[] = []
 
 // main loop
 requestIdleCallback(workLoop)
 
-function render(element: SFiber, container: Container): void {
+export function render(element: SFiber, container: Container): void {
   wipRoot = {
     dom: container,
     // @ts-ignore 型がハマらない
     props: {
       children: [element],
     },
+    alternate: currentRoot,
   }
+  deletions = []
   nextUnitOfWork = wipRoot
-}
-
-export const Seact = {
-  render,
 }
