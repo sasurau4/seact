@@ -8,21 +8,21 @@ type EFFECT_TAG =
   | typeof DELETION_EFFECT_TAG
 
 type SFiberCommonProperties = {
-  dom?: Container | null
+  dom?: DOMElement
   parent?: HTMLFiberElement
   child?: SFiber
   sibling?: SFiber
   props: {
     children: SFiber[]
   }
-  alternate?: SFiber | null
+  alternate?: SFiber
   effectTag?: EFFECT_TAG
 }
 
 type TextFiberElement = {
-  type: typeof TEXT_ELEMENT
+  type: string
   props: {
-    nodeValue: string
+    nodeValue?: string
   }
 } & SFiberCommonProperties
 type HTMLFiberElement = {
@@ -31,7 +31,7 @@ type HTMLFiberElement = {
 
 type SFiber = TextFiberElement | HTMLFiberElement
 
-type Container = HTMLElement | Text
+type DOMElement = HTMLElement | Text
 
 // same as UNREACHED macro in Rust
 function UNREACHED(): Error {
@@ -40,7 +40,7 @@ function UNREACHED(): Error {
 
 function createTextElement(text: string): TextFiberElement {
   return {
-    type: 'TEXT_ELEMENT',
+    type: TEXT_ELEMENT,
     props: {
       nodeValue: text,
       children: [],
@@ -83,7 +83,7 @@ const isGone = (prev: GeneralProps, next: GeneralProps) => (key: string) =>
   !(key in next)
 
 function updateDom(
-  dom: Container,
+  dom: DOMElement,
   prevProps: GeneralProps,
   nextProps: GeneralProps,
 ) {
@@ -134,7 +134,6 @@ function commitWork(fiber: SFiber | undefined) {
       domParent.appendChild(fiber.dom)
     } else if (fiber.effectTag === UPDATE_EFFECT_TAG && fiber.dom) {
       if (fiber.alternate) {
-      console.log("updateDom", fiber.type)
         updateDom(fiber.dom, fiber.alternate.props, fiber.props)
       } else {
         UNREACHED()
@@ -152,14 +151,13 @@ function commitRoot() {
   deletions.forEach(commitWork)
   commitWork(wipRoot?.child)
   currentRoot = wipRoot
-  wipRoot = null
+  wipRoot = undefined
 }
 
 function reconcileChildren(wipFiber: SFiber, elements: SFiber[]) {
-  console.log("reconcile!")
   let index: number = 0
   let oldFiber = wipFiber.alternate && wipFiber.alternate.child
-  let prevSibling: SFiber | undefined | null = null
+  let prevSibling: SFiber | undefined = undefined
   // NOTE: create a newFiber for each child
   while (index < elements.length || oldFiber) {
     const element = elements[index]
@@ -182,9 +180,9 @@ function reconcileChildren(wipFiber: SFiber, elements: SFiber[]) {
       newFiber = {
         type: element.type,
         props: element.props,
-        dom: null,
+        dom: undefined,
         parent: wipFiber,
-        alternate: null,
+        alternate: undefined,
         effectTag: PLACEMENT_EFFECT_TAG,
       }
     }
@@ -222,7 +220,7 @@ function performUnitOfWork(fiber: SFiber): SFiber | undefined {
   if (fiber.child) {
     return fiber.child
   }
-  let nextFiber: SFiber|undefined = fiber
+  let nextFiber: SFiber | undefined = fiber
   while (nextFiber) {
     if (nextFiber.sibling) {
       return nextFiber.sibling
@@ -248,18 +246,18 @@ function workLoop(deadline: any): void {
 /**
  * Global Vars
  */
-let nextUnitOfWork: SFiber | null | undefined = null
-let currentRoot: SFiber | null | undefined = null
-let wipRoot: SFiber | null | undefined = null
+let nextUnitOfWork: SFiber | undefined = undefined
+let currentRoot: SFiber | undefined = undefined
+let wipRoot: SFiber | undefined = undefined
 let deletions: SFiber[] = []
 
 // main loop
 requestIdleCallback(workLoop)
 
-export function render(element: SFiber, container: Container): void {
+export function render(element: SFiber, container: DOMElement): void {
+  // @ts-ignore
   wipRoot = {
     dom: container,
-    // @ts-ignore 型がハマらない
     props: {
       children: [element],
     },

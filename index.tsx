@@ -6,7 +6,6 @@ type Props = {
 const container = document.getElementById('root')
 
 const updateValue = (e: any) => {
-  console.log(e)
   rerender(e.target.value)
 }
 
@@ -26,4 +25,3 @@ if (container) {
 } else {
   console.warn('No container')
 }
-// ReactDOM.render(element, container)
