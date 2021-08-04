@@ -5,39 +5,65 @@ type Props = {
 }
 const container = document.getElementById('root')
 
-const updateValue = (e: any) => {
-  rerender(e.target.value)
-}
-
 function Counter() {
   const [state, setState] = useState(0)
   return (
-    <div onClick={() => setState((c: number) => c + 1)}>
+    <div>
       <h3>Your counter</h3>
-      <div>Counter: {state}</div>
+      <div>Count: {state}</div>
+      <div>
+        <button onClick={() => setState((c: number) => c + 1)}>
+          increment
+        </button>
+      </div>
+      <div>
+        <button onClick={() => setState((c: number) => c - 1)}>
+          decrement
+        </button>
+      </div>
     </div>
   )
 }
+
+type IntroduceProps = {
+  initialName: string
+}
+function Introduce(props: IntroduceProps) {
+  const [name, setName] = useState(props.initialName)
+  return (
+    <div>
+      <input
+        onInput={(e) => {
+          // @ts-ignore
+          setName(() => e.target.value)
+        }}
+        value={name}
+      />
+      <Piyo name={name} />
+    </div>
+  )
+}
+
 const Piyo = (props: Props) => (
   <div>
     <h3>My name is {props.name}</h3>
   </div>
 )
 
-const rerender = (value: string) => {
-  const element = (
+function App() {
+  return (
     <div>
-      <input onInput={updateValue} value={value} />
-      <h2>Hello {value}</h2>
-      <Piyo name={value} />
+      <h1>This is Seact!!!</h1>
+      <Introduce initialName="your name" />
       <Counter />
     </div>
   )
-  render(element, container as HTMLElement)
 }
+// This is needed for current seact because no root createElement is not supported
+const element = <App />
 
 if (container) {
-  rerender('World')
+  render(element, container as HTMLElement)
 } else {
   console.warn('No container')
 }
