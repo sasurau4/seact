@@ -67,15 +67,18 @@ export function createElement(
 
 export function useState<State = any>(initialState: State): [State, Function] {
   type Action = (prevState: State) => State
-  const oldHook = wipFiber?.alternate && wipFiber.alternate.hooks && wipFiber.alternate.hooks[hookIndex]
+  const oldHook =
+    wipFiber?.alternate &&
+    wipFiber.alternate.hooks &&
+    wipFiber.alternate.hooks[hookIndex]
   const hook = {
-    state: oldHook ? oldHook.state :initialState,
+    state: oldHook ? oldHook.state : initialState,
     queue: [] as Action[],
   }
-  const actions = oldHook ? oldHook.queue as Action[] : [] as Action[]
-  actions.forEach(action=> {
+  const actions = oldHook ? (oldHook.queue as Action[]) : ([] as Action[])
+  actions.forEach((action) => {
     hook.state = action(hook.state)
-  });
+  })
   const setState = (action: Action) => {
     hook.queue.push(action)
     wipRoot = {
@@ -97,8 +100,8 @@ function createDom(fiber: SFiber): HTMLElement | Text {
   const dom =
     fiber.type === TEXT_ELEMENT
       ? document.createTextNode('')
-      // NOTE: createDom function caller guard fiber.type as string
-      : document.createElement(fiber.type as string)
+      : // NOTE: createDom function caller guard fiber.type as string
+        document.createElement(fiber.type as string)
 
   updateDom(dom, {}, fiber.props)
   return dom
@@ -189,7 +192,7 @@ function commitWork(fiber: SFiber | undefined) {
     } else if (fiber.effectTag === DELETION_EFFECT_TAG && fiber.dom) {
       commitDeletion(fiber, domParent)
     }
-  } 
+  }
   commitWork(fiber.child)
   commitWork(fiber.sibling)
 }
