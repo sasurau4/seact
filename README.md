@@ -13,6 +13,12 @@ See https://pomb.us/build-your-own-react/
 
 ```
 yarn
-yarn build
+yarn watch
 yarn start
 ```
+
+Open http://localhost:8000
+
+### Screenshot
+
+![screenshot](./images/screenshot.gif)
