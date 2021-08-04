@@ -1,4 +1,4 @@
-import { createElement, render } from './src/seact.js'
+import { createElement, render, useState } from './src/seact.js'
 
 type Props = {
   name: string
@@ -9,26 +9,35 @@ const updateValue = (e: any) => {
   rerender(e.target.value)
 }
 
+function Counter() {
+  const [state, setState] = useState(0)
+  return (
+    <div onClick={() => setState((c: number) => c + 1)}>
+      <h3>Your counter</h3>
+      <div>Counter: {state}</div>
+    </div>
+  )
+}
 const Piyo = (props: Props) => (
   <div>
-    <h3>{props.name}</h3>
+    <h3>My name is {props.name}</h3>
   </div>
 )
 
-const rerender = (value:string) => {
+const rerender = (value: string) => {
   const element = (
     <div>
       <input onInput={updateValue} value={value} />
       <h2>Hello {value}</h2>
       <Piyo name={value} />
+      <Counter />
     </div>
   )
   render(element, container as HTMLElement)
 }
 
-
 if (container) {
-  rerender("World")
+  rerender('World')
 } else {
   console.warn('No container')
 }

@@ -17,6 +17,7 @@ type SFiberCommonProperties = {
   }
   alternate?: SFiber
   effectTag?: EFFECT_TAG
+  hooks?: any[]
 }
 
 type TextFiberElement = {
@@ -62,6 +63,34 @@ export function createElement(
       ),
     },
   }
+}
+
+export function useState<State = any>(initialState: State): [State, Function] {
+  type Action = (prevState: State) => State
+  const oldHook = wipFiber?.alternate && wipFiber.alternate.hooks && wipFiber.alternate.hooks[hookIndex]
+  const hook = {
+    state: oldHook ? oldHook.state :initialState,
+    queue: [] as Action[],
+  }
+  const actions = oldHook ? oldHook.queue as Action[] : [] as Action[]
+  actions.forEach(action=> {
+    hook.state = action(hook.state)
+  });
+  const setState = (action: Action) => {
+    hook.queue.push(action)
+    wipRoot = {
+      dom: currentRoot?.dom,
+      // @ts-ignore
+      props: currentRoot?.props,
+      alternate: currentRoot,
+    }
+    nextUnitOfWork = wipRoot
+    deletions = []
+  }
+
+  wipFiber?.hooks?.push(hook)
+  hookIndex++
+  return [hook.state, setState]
 }
 
 function createDom(fiber: SFiber): HTMLElement | Text {
@@ -231,6 +260,9 @@ function updateFunctionComponent(fiber: SFiber) {
     UNREACHED()
     return
   }
+  wipFiber = fiber
+  hookIndex = 0
+  wipFiber.hooks = []
   const children = [fiber.type(fiber.props)]
   reconcileChildren(fiber, children)
 }
@@ -283,6 +315,8 @@ let nextUnitOfWork: SFiber | undefined = undefined
 let currentRoot: SFiber | undefined = undefined
 let wipRoot: SFiber | undefined = undefined
 let deletions: SFiber[] = []
+let wipFiber: SFiber | undefined = undefined
+let hookIndex: number = 0
 
 // main loop
 requestIdleCallback(workLoop)
