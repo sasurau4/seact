@@ -26,7 +26,7 @@ type TextFiberElement = {
   }
 } & SFiberCommonProperties
 type HTMLFiberElement = {
-  type: string
+  type: string | Function
 } & SFiberCommonProperties
 
 type SFiber = TextFiberElement | HTMLFiberElement
@@ -124,12 +124,30 @@ function updateDom(
     })
 }
 
+function commitDeletion(fiber: SFiber | undefined, domParent: DOMElement) {
+  if (!fiber) {
+    UNREACHED()
+    return
+  }
+
+  if (fiber.dom) {
+    domParent.removeChild(fiber.dom)
+  } else {
+    commitDeletion(fiber.child, domParent)
+  }
+}
+
 function commitWork(fiber: SFiber | undefined) {
   if (!fiber) {
     return
   }
-  if (fiber.parent && fiber.parent.dom) {
-    const domParent = fiber.parent.dom
+  if (fiber.parent) {
+    let domParentFiber: HTMLFiberElement = fiber.parent
+    while (!domParentFiber.dom) {
+      // @ts-ignore parent always exist
+      domParentFiber = domParentFiber.parent
+    }
+    const domParent = domParentFiber.dom
     if (fiber.effectTag === PLACEMENT_EFFECT_TAG && fiber.dom) {
       domParent.appendChild(fiber.dom)
     } else if (fiber.effectTag === UPDATE_EFFECT_TAG && fiber.dom) {
@@ -139,11 +157,9 @@ function commitWork(fiber: SFiber | undefined) {
         UNREACHED()
       }
     } else if (fiber.effectTag === DELETION_EFFECT_TAG && fiber.dom) {
-      domParent.removeChild(fiber.dom)
+      commitDeletion(fiber, domParent)
     }
-  } else {
-    UNREACHED()
-  }
+  } 
   commitWork(fiber.child)
   commitWork(fiber.sibling)
 }
@@ -209,13 +225,29 @@ function reconcileChildren(wipFiber: SFiber, elements: SFiber[]) {
   }
 }
 
-function performUnitOfWork(fiber: SFiber): SFiber | undefined {
+function updateFunctionComponent(fiber: SFiber) {
+  if (!(fiber.type instanceof Function)) {
+    UNREACHED()
+    return
+  }
+  const children = [fiber.type(fiber.props)]
+  reconcileChildren(fiber, children)
+}
+
+function updateHostComponent(fiber: SFiber) {
   if (!fiber.dom) {
     fiber.dom = createDom(fiber)
   }
+  reconcileChildren(fiber, fiber.props.children)
+}
 
-  const elements = fiber.props.children
-  reconcileChildren(fiber, elements)
+function performUnitOfWork(fiber: SFiber): SFiber | undefined {
+  const isFunctionComponent = fiber.type instanceof Function
+  if (isFunctionComponent) {
+    updateFunctionComponent(fiber)
+  } else {
+    updateHostComponent(fiber)
+  }
 
   if (fiber.child) {
     return fiber.child
