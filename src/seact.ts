@@ -68,7 +68,8 @@ function createDom(fiber: SFiber): HTMLElement | Text {
   const dom =
     fiber.type === TEXT_ELEMENT
       ? document.createTextNode('')
-      : document.createElement(fiber.type)
+      // NOTE: createDom function caller guard fiber.type as string
+      : document.createElement(fiber.type as string)
 
   updateDom(dom, {}, fiber.props)
   return dom
